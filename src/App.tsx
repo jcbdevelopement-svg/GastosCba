@@ -718,23 +718,30 @@ function IncomesPage({
   reload: () => Promise<void>;
   notify: (s: string) => void;
 }) {
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(""), [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const list = items.filter((income) =>
     `${income.concept} ${income.source} ${income.notes || ""}`.toLowerCase().includes(q.toLowerCase()),
   );
   const total = list.reduce((sum, income) => sum + Number(income.amount), 0);
+  const groups = Object.entries(list.reduce<Record<string, Income[]>>((all, income) => {
+    const category = income.source || "Sin categoría";
+    (all[category] ||= []).push(income);
+    return all;
+  }, {})).sort(([a], [b]) => a.localeCompare(b, "es"));
+  const toggle = (category: string) => setCollapsed((current) => {
+    const next = new Set(current);
+    next.has(category) ? next.delete(category) : next.add(category);
+    return next;
+  });
   return (
     <>
       <Toolbar q={q} setQ={setQ} button="Registrar ingreso" action={() => open()} />
       <section className="metric-grid four">
         <Metric title="Ingresos totales" value={ars.format(total)} tone="green" />
-        <Metric title="Transferencias" value={String(list.length)} tone="brand" />
+        <Metric title="Movimientos" value={String(list.length)} tone="brand" />
       </section>
-      <section className="panel table-panel">
-        <div className="table-wrap">
-          {list.length ? <table><thead><tr><th>CONCEPTO</th><th>ORIGEN</th><th>FECHA</th><th>MONTO</th><th>ACCIONES</th></tr></thead><tbody>{list.map((income) => <tr key={income.id}><td><b>{income.concept}</b></td><td>{income.source}</td><td>{date(income.received_at)}</td><td className="profit">{ars.format(income.amount)}</td><td><button className="row-action" onClick={() => open(income)}>Editar</button><Delete table="incomes" id={income.id} reload={reload} notify={notify} /></td></tr>)}</tbody></table> : <Empty text="Todavía no registraste ingresos." />}
-        </div>
-      </section>
+      <GroupSummary count={list.length} groups={groups.map(([category]) => category)} collapsed={collapsed} setCollapsed={setCollapsed} label="ingresos" />
+      {list.length ? groups.map(([category, incomes]) => <CollapsibleGroup key={category} title={category} count={incomes.length} noun="ingresos" collapsed={!q && collapsed.has(category)} toggle={() => toggle(category)}><div className="table-wrap"><table><thead><tr><th>CONCEPTO</th><th>FECHA</th><th>MONTO</th><th>ACCIONES</th></tr></thead><tbody>{incomes.map((income) => <tr key={income.id}><td><b>{income.concept}</b></td><td>{date(income.received_at)}</td><td className="profit">{ars.format(income.amount)}</td><td><button className="row-action" onClick={() => open(income)}>Editar</button><Delete table="incomes" id={income.id} reload={reload} notify={notify} /></td></tr>)}</tbody></table></div></CollapsibleGroup>) : <section className="panel"><Empty text="Todavía no registraste ingresos." /></section>}
     </>
   );
 }
@@ -1067,7 +1074,7 @@ function DataModal({
             <Field name="concept" label="Concepto" value={item.concept} />
             <div className="form-grid">
               <Field name="amount" label="Monto recibido" type="number" value={item.amount ?? 0} />
-              <Select name="source" label="Origen" options={["Transferencia", "Efectivo", "Sueldo", "Reintegro", "Otro"]} value={item.source || "Transferencia"} />
+              <Select name="source" label="Categoría" options={["Córdoba", "Cobro personal"]} value={item.source || "Córdoba"} />
               <Field name="date" label="Fecha" type="date" value={item.received_at || today()} />
             </div>
             <Field name="notes" label="Notas" value={item.notes} />
