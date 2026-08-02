@@ -320,7 +320,7 @@ function Content({
     );
   if (page === "Configuración")
     return <SettingsPage session={session} notify={notify} />;
-  return <Reports sales={sales} expenses={expenses} notify={notify} />;
+  return <Reports incomes={incomes} expenses={expenses} notify={notify} />;
 }
 
 const themeColors = ["#8b2cf5", "#2563eb", "#059669", "#dc2626", "#ea580c", "#db2777", "#111827"];
@@ -864,23 +864,30 @@ function Stats({
   );
 }
 function Reports({
-  sales,
+  incomes,
   expenses,
   notify,
 }: {
-  sales: Sale[];
+  incomes: Income[];
   expenses: Expense[];
   notify: (s: string) => void;
 }) {
-  const t = totals(sales, expenses),
-    rows = [
-      ["Ventas", t.revenue],
-      ["Costos", t.cost],
-      ["Gastos", t.expense],
-      ["Ganancia bruta", t.gross],
-      ["Ganancia neta", t.net],
-      ["Margen", t.margin],
-    ];
+  const incomeTotal = incomes.reduce((sum, income) => sum + Number(income.amount), 0);
+  const expenseTotal = expenses.reduce((sum, expense) => sum + Number(expense.amount), 0);
+  const averageExpense = expenses.length ? expenseTotal / expenses.length : 0;
+  const categories = expenses.reduce<Record<string, number>>((all, expense) => {
+    all[expense.category] = (all[expense.category] || 0) + Number(expense.amount);
+    return all;
+  }, {});
+  const topCategory = Object.entries(categories).sort((a, b) => b[1] - a[1])[0]?.[0] || "Sin datos";
+  const rows = [
+    ["Ingresos", ars.format(incomeTotal)],
+    ["Gastos totales", ars.format(expenseTotal)],
+    ["Saldo", ars.format(incomeTotal - expenseTotal)],
+    ["Promedio por gasto", ars.format(averageExpense)],
+    ["Movimientos", String(expenses.length)],
+    ["Categoría principal", topCategory],
+  ];
   async function exportPdf() {
     try {
       const [{ jsPDF }, { default: autoTable }, brandMark] = await Promise.all([import("jspdf"), import("jspdf-autotable"), loadBrandMark()]);
@@ -888,7 +895,7 @@ function Reports({
       doc.setProperties({ title: "Reporte financiero", author: "JCB Developement" });
       doc.setFillColor(116, 35, 204); doc.rect(0, 0, 210, 36, "F");
       doc.setTextColor(255); doc.setFontSize(20); doc.text("Reporte financiero", 14, 17); doc.setFontSize(9); doc.text(`Generado el ${date(new Date().toISOString())}`, 14, 25);
-      autoTable(doc, { startY: 48, head: [["Indicador", "Resultado"]], body: rows.map(([name, value]) => [String(name), name === "Margen" ? `${Number(value).toFixed(1)}%` : ars.format(Number(value))]), theme: "grid", styles: { fontSize: 10, cellPadding: 5 }, headStyles: { fillColor: [116, 35, 204] }, alternateRowStyles: { fillColor: [248, 245, 252] } });
+      autoTable(doc, { startY: 48, head: [["Indicador", "Resultado"]], body: rows, theme: "grid", styles: { fontSize: 10, cellPadding: 5 }, headStyles: { fillColor: [116, 35, 204] }, alternateRowStyles: { fillColor: [248, 245, 252] } });
       addPdfBranding(doc, brandMark);
       doc.setFontSize(7); doc.setTextColor(120); doc.text("JCB Developement - Documento de marca", 105, 291, { align: "center" });
       doc.save("reporte-financiero-jb.pdf"); notify("Reporte PDF exportado con marca de agua.");
@@ -899,7 +906,7 @@ function Reports({
       <section className="report-hero panel">
         <div>
           <span>REPORTE FINANCIERO</span>
-          <h2>Resumen del período</h2>
+          <h2>Resumen personal del período</h2>
           <p>Información obtenida directamente de Supabase.</p>
         </div>
         <div className="export">
@@ -913,11 +920,7 @@ function Reports({
         {rows.map(([n, v]) => (
           <article>
             <span>{n}</span>
-            <b>
-              {n === "Margen"
-                ? Number(v).toFixed(1) + "%"
-                : ars.format(Number(v))}
-            </b>
+            <b>{v}</b>
           </article>
         ))}
       </section>
