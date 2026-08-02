@@ -678,13 +678,45 @@ function ExpensesPage({
   reload: () => Promise<void>;
   notify: (s: string) => void;
 }) {
-  const [q, setQ] = useState(""), [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [q, setQ] = useState(""),
+    [collapsed, setCollapsed] = useState<Set<string>>(new Set()),
+    [quickOpen, setQuickOpen] = useState(false),
+    [quickText, setQuickText] = useState(""),
+    [importing, setImporting] = useState(false);
   const list = items.filter((x) =>
       (x.name + x.category).toLowerCase().includes(q.toLowerCase()),
     ),
     sum = list.reduce((a, x) => a + Number(x.amount), 0);
   const groups = Object.entries(list.reduce<Record<string, Expense[]>>((all, expense) => { const key = expense.category || "Sin categoría"; (all[key] ||= []).push(expense); return all; }, {})).sort(([a], [b]) => a.localeCompare(b, "es")).map(([key, group]) => [key, group.sort((a, b) => a.name.localeCompare(b.name, "es"))] as [string, Expense[]]);
   const toggle = (key: string) => setCollapsed((current) => { const next = new Set(current); next.has(key) ? next.delete(key) : next.add(key); return next; });
+  const importQuickExpenses = async () => {
+    const lines = quickText.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    const parseAmount = (raw: string) => {
+      let value = raw.replace(/[$\s]/g, "");
+      if (value.includes(",")) value = value.replace(/\./g, "").replace(",", ".");
+      else if (/\.\d{3}(?:\.|$)/.test(value)) value = value.replace(/\./g, "");
+      return Number(value);
+    };
+    const rows = lines.map((line) => {
+      const [amountRaw, nameRaw, categoryRaw, dateRaw] = line.split("|").map((part) => part.trim());
+      return {
+        amount: parseAmount(amountRaw || ""),
+        name: nameRaw,
+        category: categoryRaw || "Otros",
+        expense_date: /^\d{4}-\d{2}-\d{2}$/.test(dateRaw || "") ? dateRaw : today(),
+        description: null,
+      };
+    }).filter((row) => row.name && Number.isFinite(row.amount) && row.amount > 0);
+    if (!rows.length) { notify("No encontré gastos válidos. Usá: monto | concepto"); return; }
+    setImporting(true);
+    const { data: auth } = await supabase.auth.getUser();
+    const { error } = await supabase.from("expenses").insert(rows.map((row) => ({ ...row, user_id: auth.user?.id })));
+    setImporting(false);
+    if (error) { notify(error.message); return; }
+    const skipped = lines.length - rows.length;
+    setQuickText(""); setQuickOpen(false); await reload();
+    notify(`${rows.length} gastos importados${skipped ? `; ${skipped} líneas omitidas` : ""}.`);
+  };
   return (
     <>
       <Toolbar
@@ -692,7 +724,13 @@ function ExpensesPage({
         setQ={setQ}
         button="Registrar gasto"
         action={() => open()}
+        extra={<button onClick={() => setQuickOpen((value) => !value)}><Download />Carga rápida</button>}
       />
+      {quickOpen && <section className="panel quick-import">
+        <div className="panel-head"><div><h2>Pegar gastos desde el celular</h2><p>Una línea por gasto: monto | concepto | categoría opcional | fecha opcional</p></div></div>
+        <textarea value={quickText} onChange={(event) => setQuickText(event.target.value)} placeholder={"12500 | Supermercado\n3200 | Transporte | Transporte\n8500 | Farmacia | Salud | 2026-08-02"} />
+        <div className="quick-import-actions"><small>Sin categoría se guarda como “Otros”; sin fecha se usa hoy.</small><button className="primary" onClick={importQuickExpenses} disabled={importing}>{importing ? <Loader2 className="spin" /> : <Download />}{importing ? "Importando..." : "Importar todos"}</button></div>
+      </section>}
       <section className="metric-grid four">
         <Metric title="Total gastos" value={ars.format(sum)} />
         <Metric title="Últimos 7 días" value={ars.format(daySum(items, 6))} />
@@ -714,7 +752,8 @@ function IncomesPage({
   reload: () => Promise<void>;
   notify: (s: string) => void;
 }) {
-  const [q, setQ] = useState(""), [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [q, setQ] = useState(""),
+    [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const list = items.filter((income) =>
     `${income.concept} ${income.source} ${income.notes || ""}`.toLowerCase().includes(q.toLowerCase()),
   );
