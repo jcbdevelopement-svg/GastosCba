@@ -18,7 +18,6 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   AlertTriangle,
-  BarChart3,
   Boxes,
   CalendarDays,
   Check,
@@ -33,7 +32,6 @@ import {
   Receipt,
   Search,
   Settings,
-  ShoppingBag,
   Trash2,
   UserRound,
   WalletCards,
@@ -45,11 +43,8 @@ import { useFinancialData } from "./hooks/useFinancialData";
 import type { Expense, Payment, Product, Sale } from "./lib/types";
 type Page =
   | "Dashboard"
-  | "Ventas"
-  | "Productos"
   | "Gastos"
   | "Pagos"
-  | "Estadísticas"
   | "Reportes"
   | "Configuración";
 type Modal = {
@@ -59,11 +54,8 @@ type Modal = {
 type Period = "today" | "7" | "15" | "30";
 const nav = [
   ["Dashboard", LayoutDashboard],
-  ["Ventas", ShoppingBag],
-  ["Productos", Boxes],
   ["Gastos", Receipt],
   ["Pagos", WalletCards],
-  ["Estadísticas", BarChart3],
   ["Reportes", FileBarChart],
 ] as const;
 const ars = { format(value: number) {
@@ -173,7 +165,7 @@ export default function App() {
             <h1>{page}</h1>
             <p>
               {page === "Dashboard"
-                ? "Todo lo importante de tu negocio, en un solo lugar."
+                ? "Tus gastos personales, en un solo lugar."
                 : "Datos reales, seguros y actualizados."}
             </p>
           </div>
@@ -183,15 +175,6 @@ export default function App() {
               Supabase
             </span>
             <PeriodSelect value={period} set={setPeriod} />
-            {(page === "Dashboard" || page === "Ventas") && (
-              <button
-                className="primary"
-                onClick={() => setModal({ kind: "sale" })}
-              >
-                <Plus />
-                Agregar venta
-              </button>
-            )}
           </div>
         </header>
         {data.error && (
@@ -311,18 +294,7 @@ function Content({
       (x) => !start || new Date(x.expense_date + "T12:00:00-03:00") >= start,
     );
   if (page === "Dashboard")
-    return <Dashboard sales={sales} expenses={expenses} />;
-  if (page === "Ventas")
-    return <SalesPage sales={sales} open={(sale) => modal({ kind: "sale", item: sale })} reload={data.reload} notify={notify} />;
-  if (page === "Productos")
-    return (
-      <ProductsPage
-        items={data.products}
-        open={(x) => modal({ kind: "product", item: x })}
-        reload={data.reload}
-        notify={notify}
-      />
-    );
+    return <Dashboard expenses={expenses} />;
   if (page === "Gastos")
     return (
       <ExpensesPage
@@ -341,8 +313,6 @@ function Content({
         notify={notify}
       />
     );
-  if (page === "Estadísticas")
-    return <Stats sales={sales} expenses={expenses} products={data.products} />;
   if (page === "Configuración")
     return <SettingsPage session={session} notify={notify} />;
   return <Reports sales={sales} expenses={expenses} notify={notify} />;
@@ -471,28 +441,38 @@ function totals(sales: Sale[], expenses: Expense[]) {
   };
 }
 function Dashboard({
-  sales,
   expenses,
 }: {
-  sales: Sale[];
   expenses: Expense[];
 }) {
-  const t = totals(sales, expenses),
-    chart = groupSales(sales);
+  const total = expenses.reduce((sum, expense) => sum + Number(expense.amount), 0);
+  const average = expenses.length ? total / expenses.length : 0;
+  const byCategory = expenses.reduce<Record<string, number>>((all, expense) => {
+    all[expense.category] = (all[expense.category] || 0) + Number(expense.amount);
+    return all;
+  }, {});
+  const topCategory = Object.entries(byCategory).sort((a, b) => b[1] - a[1])[0];
+  const chart = [...expenses.reduce((all, expense) => {
+    const current = all.get(expense.expense_date) || { day: date(expense.expense_date), amount: 0 };
+    current.amount += Number(expense.amount);
+    all.set(expense.expense_date, current);
+    return all;
+  }, new Map<string, { day: string; amount: number }>()).entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([, value]) => value);
   return (
     <>
       <section className="metric-grid">
-        <Metric title="Ventas" value={ars.format(t.revenue)} tone="brand" />
-        <Metric title="Ganancia neta" value={ars.format(t.net)} tone="green" />
-        <Metric title="Costos" value={ars.format(t.cost)} tone="red" />
-        <Metric title="Gastos" value={ars.format(t.expense)} tone="orange" />
-        <Metric title="Margen" value={t.margin.toFixed(1) + "%"} tone="brand" />
+        <Metric title="Gastos totales" value={ars.format(total)} tone="orange" />
+        <Metric title="Promedio por gasto" value={ars.format(average)} tone="brand" />
+        <Metric title="Movimientos" value={String(expenses.length)} tone="green" />
+        <Metric title="Categoría principal" value={topCategory?.[0] || "Sin datos"} tone="brand" />
       </section>
       <section className="panel chart-panel">
         <div className="panel-head">
           <div>
-            <h2>Rendimiento financiero</h2>
-            <p>{t.count} ventas completadas</p>
+            <h2>Evolución de gastos</h2>
+            <p>{expenses.length} movimientos registrados</p>
           </div>
         </div>
         {chart.length ? (
@@ -500,15 +480,7 @@ function Dashboard({
             <div className="chart-legends">
               <span>
                 <i className="purple" />
-                Ventas
-              </span>
-              <span>
-                <i className="amber" />
-                Costos
-              </span>
-              <span>
-                <i className="green" />
-                Ganancia
+                Gastos
               </span>
             </div>
             <ResponsiveContainer width="100%" height={280}>
@@ -517,28 +489,25 @@ function Dashboard({
                 <XAxis dataKey="day" />
                 <YAxis />
                 <Tooltip formatter={(v) => ars.format(Number(v))} />
-                <Area dataKey="sales" stroke="#8b2cf5" fill="#8b2cf522" />
-                <Area dataKey="cost" stroke="#aeb2bb" fill="transparent" />
-                <Area dataKey="profit" stroke="#6120aa" fill="transparent" />
+                <Area dataKey="amount" stroke="#8b2cf5" fill="#8b2cf522" />
               </AreaChart>
             </ResponsiveContainer>
           </>
         ) : (
-          <Empty text="Todavía no registraste ventas." />
+          <Empty text="Todavía no registraste gastos." />
         )}
         <div className="chart-summary">
           <span>
-            Ventas totales<b>{ars.format(t.revenue)}</b>
+            Gastos totales<b>{ars.format(total)}</b>
           </span>
           <span>
-            Ganancia bruta<b>{ars.format(t.gross)}</b>
+            Promedio<b>{ars.format(average)}</b>
           </span>
           <span>
-            Ganancia neta<b>{ars.format(t.net)}</b>
+            Mayor categoría<b>{topCategory ? ars.format(topCategory[1]) : ars.format(0)}</b>
           </span>
         </div>
       </section>
-      <SalesTable sales={sales.slice(0, 5)} title="Últimas ventas" />
     </>
   );
 }
