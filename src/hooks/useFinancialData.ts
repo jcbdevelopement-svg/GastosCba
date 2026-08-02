@@ -1,17 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
-import type { Expense, Payment, Product, Sale } from "../lib/types";
+import type { Expense, Income, Payment, Product, Sale } from "../lib/types";
 export function useFinancialData() {
   const [products, setProducts] = useState<Product[]>([]),
     [sales, setSales] = useState<Sale[]>([]),
     [expenses, setExpenses] = useState<Expense[]>([]),
+    [incomes, setIncomes] = useState<Income[]>([]),
     [payments, setPayments] = useState<Payment[]>([]),
     [loading, setLoading] = useState(true),
     [error, setError] = useState("");
   const reload = useCallback(async () => {
     setLoading(true);
     setError("");
-    const [p, s, e, pa] = await Promise.all([
+    const [p, s, e, i, pa] = await Promise.all([
       supabase
         .from("products")
         .select("id,user_id,name,category,sale_price,cost_price,tier_prices,created_at,updated_at")
@@ -25,11 +26,16 @@ export function useFinancialData() {
         .select("id,user_id,name,category,amount,description,expense_date,created_at")
         .order("expense_date", { ascending: false }),
       supabase
+        .from("incomes")
+        .select("id,user_id,concept,amount,source,received_at,notes,created_at")
+        .order("received_at", { ascending: false }),
+      supabase
         .from("payments")
         .select("id,user_id,concept,amount,payment_method,status,payment_date,notes,created_at")
         .order("payment_date", { ascending: false }),
     ]);
-    const err = p.error || s.error || e.error || pa.error;
+    const incomeTableMissing = i.error?.code === "PGRST205" || i.error?.code === "42P01";
+    const err = p.error || s.error || e.error || (!incomeTableMissing && i.error) || pa.error;
     if (err) setError(err.message);
     setProducts((p.data || []) as Product[]);
     setSales(
@@ -46,11 +52,12 @@ export function useFinancialData() {
       })) as Sale[],
     );
     setExpenses((e.data || []) as Expense[]);
+    setIncomes((i.data || []) as Income[]);
     setPayments((pa.data || []) as Payment[]);
     setLoading(false);
   }, []);
   useEffect(() => {
     reload();
   }, [reload]);
-  return { products, sales, expenses, payments, loading, error, reload };
+  return { products, sales, expenses, incomes, payments, loading, error, reload };
 }

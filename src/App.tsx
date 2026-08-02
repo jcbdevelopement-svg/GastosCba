@@ -40,20 +40,22 @@ import {
 import { supabase } from "./lib/supabase";
 import { Auth } from "./components/Auth";
 import { useFinancialData } from "./hooks/useFinancialData";
-import type { Expense, Payment, Product, Sale } from "./lib/types";
+import type { Expense, Income, Payment, Product, Sale } from "./lib/types";
 type Page =
   | "Dashboard"
+  | "Ingresos"
   | "Gastos"
   | "Pagos"
   | "Reportes"
   | "Configuración";
 type Modal = {
-  kind: "sale" | "product" | "expense" | "payment";
+  kind: "sale" | "product" | "expense" | "income" | "payment";
   item?: any;
 } | null;
 type Period = "today" | "7" | "15" | "30";
 const nav = [
   ["Dashboard", LayoutDashboard],
+  ["Ingresos", ArrowDownRight],
   ["Gastos", Receipt],
   ["Pagos", WalletCards],
   ["Reportes", FileBarChart],
@@ -290,11 +292,14 @@ function Content({
 }) {
   const start = since(period),
     sales = data.sales.filter((x) => !start || new Date(x.sold_at) >= start),
+    incomes = data.incomes.filter((x) => !start || new Date(x.received_at + "T12:00:00-03:00") >= start),
     expenses = data.expenses.filter(
       (x) => !start || new Date(x.expense_date + "T12:00:00-03:00") >= start,
     );
   if (page === "Dashboard")
-    return <Dashboard expenses={expenses} />;
+    return <Dashboard expenses={expenses} incomes={incomes} />;
+  if (page === "Ingresos")
+    return <IncomesPage items={data.incomes} open={(x) => modal({ kind: "income", item: x })} reload={data.reload} notify={notify} />;
   if (page === "Gastos")
     return (
       <ExpensesPage
@@ -442,10 +447,13 @@ function totals(sales: Sale[], expenses: Expense[]) {
 }
 function Dashboard({
   expenses,
+  incomes,
 }: {
   expenses: Expense[];
+  incomes: Income[];
 }) {
   const total = expenses.reduce((sum, expense) => sum + Number(expense.amount), 0);
+  const incomeTotal = incomes.reduce((sum, income) => sum + Number(income.amount), 0);
   const average = expenses.length ? total / expenses.length : 0;
   const byCategory = expenses.reduce<Record<string, number>>((all, expense) => {
     all[expense.category] = (all[expense.category] || 0) + Number(expense.amount);
@@ -463,7 +471,9 @@ function Dashboard({
   return (
     <>
       <section className="metric-grid">
+        <Metric title="Ingresos" value={ars.format(incomeTotal)} tone="green" />
         <Metric title="Gastos totales" value={ars.format(total)} tone="orange" />
+        <Metric title="Saldo" value={ars.format(incomeTotal - total)} tone={incomeTotal - total >= 0 ? "green" : "red"} />
         <Metric title="Promedio por gasto" value={ars.format(average)} tone="brand" />
         <Metric title="Movimientos" value={String(expenses.length)} tone="green" />
         <Metric title="Categoría principal" value={topCategory?.[0] || "Sin datos"} tone="brand" />
@@ -697,6 +707,37 @@ function ExpensesPage({
     </>
   );
 }
+function IncomesPage({
+  items,
+  open,
+  reload,
+  notify,
+}: {
+  items: Income[];
+  open: (x?: Income) => void;
+  reload: () => Promise<void>;
+  notify: (s: string) => void;
+}) {
+  const [q, setQ] = useState("");
+  const list = items.filter((income) =>
+    `${income.concept} ${income.source} ${income.notes || ""}`.toLowerCase().includes(q.toLowerCase()),
+  );
+  const total = list.reduce((sum, income) => sum + Number(income.amount), 0);
+  return (
+    <>
+      <Toolbar q={q} setQ={setQ} button="Registrar ingreso" action={() => open()} />
+      <section className="metric-grid four">
+        <Metric title="Ingresos totales" value={ars.format(total)} tone="green" />
+        <Metric title="Transferencias" value={String(list.length)} tone="brand" />
+      </section>
+      <section className="panel table-panel">
+        <div className="table-wrap">
+          {list.length ? <table><thead><tr><th>CONCEPTO</th><th>ORIGEN</th><th>FECHA</th><th>MONTO</th><th>ACCIONES</th></tr></thead><tbody>{list.map((income) => <tr key={income.id}><td><b>{income.concept}</b></td><td>{income.source}</td><td>{date(income.received_at)}</td><td className="profit">{ars.format(income.amount)}</td><td><button className="row-action" onClick={() => open(income)}>Editar</button><Delete table="incomes" id={income.id} reload={reload} notify={notify} /></td></tr>)}</tbody></table> : <Empty text="Todavía no registraste ingresos." />}
+        </div>
+      </section>
+    </>
+  );
+}
 function PaymentsPage({
   items,
   open,
@@ -894,7 +935,8 @@ function DataModal({
     return <SaleModal products={products} item={modal.item} close={close} done={done} />;
   const item = modal.item || {},
     isProduct = modal.kind === "product",
-    isExpense = modal.kind === "expense";
+    isExpense = modal.kind === "expense",
+    isIncome = modal.kind === "income";
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const f = new FormData(e.currentTarget),
@@ -915,6 +957,14 @@ function DataModal({
         description: f.get("description"),
         expense_date: f.get("date"),
       });
+    else if (isIncome)
+      Object.assign(payload, {
+        concept: f.get("concept"),
+        amount: +String(f.get("amount")),
+        source: f.get("source"),
+        received_at: f.get("date"),
+        notes: f.get("notes"),
+      });
     else
       Object.assign(payload, {
         concept: f.get("concept"),
@@ -924,7 +974,7 @@ function DataModal({
         payment_date: f.get("date"),
         notes: f.get("notes"),
       });
-    const table = isProduct ? "products" : isExpense ? "expenses" : "payments",
+    const table = isProduct ? "products" : isExpense ? "expenses" : isIncome ? "incomes" : "payments",
       q = item.id
         ? supabase.from(table).update(payload).eq("id", item.id)
         : supabase.from(table).insert(payload),
@@ -938,7 +988,7 @@ function DataModal({
         <ModalHead
           title={
             (item.id ? "Editar " : "Nuevo ") +
-            (isProduct ? "producto" : isExpense ? "gasto" : "pago")
+            (isProduct ? "producto" : isExpense ? "gasto" : isIncome ? "ingreso" : "pago")
           }
           close={close}
         />
@@ -1011,6 +1061,16 @@ function DataModal({
               label="Descripción"
               value={item.description}
             />
+          </>
+        ) : isIncome ? (
+          <>
+            <Field name="concept" label="Concepto" value={item.concept} />
+            <div className="form-grid">
+              <Field name="amount" label="Monto recibido" type="number" value={item.amount ?? 0} />
+              <Select name="source" label="Origen" options={["Transferencia", "Efectivo", "Sueldo", "Reintegro", "Otro"]} value={item.source || "Transferencia"} />
+              <Field name="date" label="Fecha" type="date" value={item.received_at || today()} />
+            </div>
+            <Field name="notes" label="Notas" value={item.notes} />
           </>
         ) : (
           <>
