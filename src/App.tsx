@@ -52,7 +52,7 @@ type Modal = {
   kind: "sale" | "product" | "expense" | "income" | "payment";
   item?: any;
 } | null;
-type Period = "today" | "7" | "15" | "30";
+type Period = "7" | "month";
 const nav = [
   ["Dashboard", LayoutDashboard],
   ["Ingresos", ArrowDownRight],
@@ -85,10 +85,9 @@ function addPdfBranding(doc: any, mark: string) {
 function since(p: Period) {
   const n = new Date(),
     d = new Date(n);
-  if (p === "today") d.setHours(0, 0, 0, 0);
   if (p === "7") d.setDate(n.getDate() - 6);
-  if (p === "15") d.setDate(n.getDate() - 14);
-  if (p === "30") d.setDate(n.getDate() - 29);
+  if (p === "month") d.setDate(1);
+  d.setHours(0, 0, 0, 0);
   return d;
 }
 export default function App() {
@@ -96,7 +95,7 @@ export default function App() {
     [page, setPage] = useState<Page>("Dashboard"),
     [menu, setMenu] = useState(false),
     [modal, setModal] = useState<Modal>(null),
-    [period, setPeriod] = useState<Period>("30"),
+    [period, setPeriod] = useState<Period>("month"),
     [toast, setToast] = useState("");
   const data = useFinancialData();
   useEffect(() => {
@@ -383,10 +382,8 @@ function PeriodSelect({
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const options: Array<{ value: Period; label: string }> = [
-    { value: "today", label: "Hoy" },
     { value: "7", label: "Últimos 7 días" },
-    { value: "15", label: "Últimos 15 días" },
-    { value: "30", label: "Últimos 30 días" },
+    { value: "month", label: "Este mes" },
   ];
   useEffect(() => {
     const close = (event: MouseEvent) => {
@@ -698,9 +695,8 @@ function ExpensesPage({
       />
       <section className="metric-grid four">
         <Metric title="Total gastos" value={ars.format(sum)} />
-        <Metric title="Hoy" value={ars.format(daySum(items, 0))} />
         <Metric title="Últimos 7 días" value={ars.format(daySum(items, 6))} />
-        <Metric title="Últimos 30 días" value={ars.format(daySum(items, 29))} />
+        <Metric title="Este mes" value={ars.format(monthSum(items))} />
       </section>
       <GroupSummary count={list.length} groups={groups.map(([key]) => key)} collapsed={collapsed} setCollapsed={setCollapsed} label="gastos" />
       {list.length ? groups.map(([key, group]) => <CollapsibleGroup key={key} title={key} count={group.length} noun="gastos" collapsed={!q && collapsed.has(key)} toggle={() => toggle(key)}><div className="table-wrap"><table><thead><tr><th>GASTO</th><th>FECHA</th><th>MONTO</th><th>ACCIONES</th></tr></thead><tbody>{group.map((e) => <tr key={e.id}><td><b>{e.name}</b></td><td>{date(e.expense_date)}</td><td>{ars.format(e.amount)}</td><td><button className="row-action" onClick={() => open(e)}>Editar</button><Delete table="expenses" id={e.id} reload={reload} notify={notify} /></td></tr>)}</tbody></table></div></CollapsibleGroup>) : <section className="panel"><Empty text="No hay gastos registrados." /></section>}
@@ -1480,6 +1476,14 @@ function daySum(items: Expense[], days: number) {
   return items
     .filter((x) => new Date(x.expense_date + "T12:00:00-03:00") >= d)
     .reduce((a, x) => a + Number(x.amount), 0);
+}
+function monthSum(items: Expense[]) {
+  const start = new Date();
+  start.setDate(1);
+  start.setHours(0, 0, 0, 0);
+  return items
+    .filter((x) => new Date(x.expense_date + "T12:00:00-03:00") >= start)
+    .reduce((sum, x) => sum + Number(x.amount), 0);
 }
 function today() {
   return new Intl.DateTimeFormat("en-CA", {
