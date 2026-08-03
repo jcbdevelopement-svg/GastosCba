@@ -2,7 +2,7 @@ create table if not exists public.expenses (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   name text not null check (length(trim(name)) > 0),
-  category text not null default 'Otros',
+  category text not null default '🎁 Regalos y otros',
   amount numeric(14,2) not null check (amount > 0),
   description text,
   expense_date date not null default current_date,

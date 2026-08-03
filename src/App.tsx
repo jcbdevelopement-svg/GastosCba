@@ -702,7 +702,7 @@ function ExpensesPage({
       return {
         amount: parseAmount(amountRaw || ""),
         name: nameRaw,
-        category: categoryRaw || "Otros",
+        category: categoryRaw || "🎁 Regalos y otros",
         expense_date: /^\d{4}-\d{2}-\d{2}$/.test(dateRaw || "") ? dateRaw : today(),
         description: null,
       };
@@ -729,7 +729,7 @@ function ExpensesPage({
       {quickOpen && <section className="panel quick-import">
         <div className="panel-head"><div><h2>Pegar gastos desde el celular</h2><p>Una línea por gasto: monto | concepto | categoría opcional | fecha opcional</p></div></div>
         <textarea value={quickText} onChange={(event) => setQuickText(event.target.value)} placeholder={"12500 | Supermercado\n3200 | Transporte | Transporte\n8500 | Farmacia | Salud | 2026-08-02"} />
-        <div className="quick-import-actions"><small>Sin categoría se guarda como “Otros”; sin fecha se usa hoy.</small><button className="primary" onClick={importQuickExpenses} disabled={importing}>{importing ? <Loader2 className="spin" /> : <Download />}{importing ? "Importando..." : "Importar todos"}</button></div>
+        <div className="quick-import-actions"><small>Sin categoría se guarda como “🎁 Regalos y otros”; sin fecha se usa hoy.</small><button className="primary" onClick={importQuickExpenses} disabled={importing}>{importing ? <Loader2 className="spin" /> : <Download />}{importing ? "Importando..." : "Importar todos"}</button></div>
       </section>}
       <section className="metric-grid four">
         <Metric title="Total gastos" value={ars.format(sum)} />
@@ -1065,26 +1065,19 @@ function DataModal({
                 name="category"
                 label="Categoría"
                 options={[
-                  "📢 Publicidad y Marketing",
-                  "🖥️ Hosting",
-                  "🌐 Dominios",
-                  "🧩 Software y Herramientas",
-                  "📦 Productos / Mercadería",
-                  "🚚 Envíos y Logística",
-                  "🏭 Proveedores",
-                  "💳 Comisiones de Pago",
-                  "🛍️ Comisiones de Marketplace",
-                  "💼 Servicios Profesionales",
-                  "👥 Sueldos y Personal",
-                  "🏢 Alquiler",
-                  "💡 Servicios e Infraestructura",
-                  "📞 Telefonía e Internet",
-                  "🎨 Diseño y Contenido",
-                  "📸 Fotografía / Video",
-                  "🔄 Devoluciones y Reembolsos",
-                  "🧾 Impuestos",
-                  "🏦 Gastos Bancarios",
-                  "💸 Otros",
+                  "🍔 Alimentación",
+                  "🚌 Transporte",
+                  "📚 Universidad",
+                  "📱 Tecnología y comunicación",
+                  "🧼 Higiene y cuidado personal",
+                  "👕 Ropa",
+                  "🎮 Entretenimiento",
+                  "🏋️ Actividad física",
+                  "💊 Salud",
+                  "🏠 Hogar",
+                  "💳 Finanzas",
+                  "🎁 Regalos y otros",
+                  "💰 Ahorro",
                 ]}
                 value={item.category}
               />
