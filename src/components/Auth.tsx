@@ -2,10 +2,7 @@ import { FormEvent, useState } from 'react'
 import { BarChart3, ChevronLeft, Loader2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
-const productionUrl = 'https://dashboard-estadisticas-7pn.pages.dev'
-const authRedirectUrl = ['localhost', '127.0.0.1'].includes(location.hostname)
-  ? location.origin
-  : productionUrl
+const authRedirectUrl = location.origin
 
 export function Auth() {
   const [mode, setMode] = useState<'login' | 'register' | 'reset'>('login')
@@ -56,9 +53,9 @@ export function Auth() {
       {mode === 'reset' && <button type="button" className="auth-back" onClick={() => setMode('login')}><ChevronLeft />Volver</button>}
       <div className="auth-icon"><BarChart3 /></div>
       <h1>{mode === 'login' ? 'Bienvenido' : mode === 'register' ? 'Crear cuenta' : 'Recuperar acceso'}</h1>
-      <p>{mode === 'login' ? 'Ingresá para administrar tu negocio.' : mode === 'register' ? 'Empezá a controlar tus finanzas.' : 'Te enviaremos un enlace de recuperación.'}</p>
+      <p>{mode === 'login' ? 'Ingresá para administrar tus gastos personales.' : mode === 'register' ? 'Empezá a controlar tus finanzas personales.' : 'Te enviaremos un enlace de recuperación.'}</p>
       {mode === 'register' && <label>Nombre<input required value={name} onChange={e => setName(e.target.value)} placeholder="Tu nombre" /></label>}
-      <label>Email<input required type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="nombre@empresa.com" /></label>
+      <label>Email<input required type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="tu@email.com" autoCapitalize="none" autoCorrect="off" /></label>
       {mode !== 'reset' && <label>Contraseña<input required minLength={6} type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Mínimo 6 caracteres" /></label>}
       {message && <div className="auth-message">{message}</div>}
       <button className="primary auth-submit" disabled={busy}>{busy ? <Loader2 className="spin" /> : mode === 'login' ? 'Ingresar' : mode === 'register' ? 'Registrarme' : 'Enviar enlace'}</button>
